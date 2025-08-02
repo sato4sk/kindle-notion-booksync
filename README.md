@@ -66,3 +66,8 @@ uv run main.py
 ### 注意事項
 
 *   Notion APIのレート制限やGemini APIのクォータ制限に注意してください。特にGemini APIは無料枠に制限があるため、大量の書籍を一度に処理するとエラーになる可能性があります。その場合は、時間をおいて再試行するか、APIの利用状況を確認してください。
+
+### 参考
+
+Kindle蔵書リストのメタデータ解析コードは、以下のリポジトリを参考とさせていただきました。
+https://github.com/karaage0703/kindle-analyzer?tab=readme-ov-file
