@@ -1,5 +1,5 @@
-from extract_kindle_data import get_cleaned_kindle_data
-from register_to_notion import register_kindle_data_to_notion
+from src.kindle_data.processor import get_cleaned_kindle_data
+from src.notion_integration.registrar import register_kindle_data_to_notion
 
 def main():
     print("Kindleデータ抽出とNotion登録を開始します。")
