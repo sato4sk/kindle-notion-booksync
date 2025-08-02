@@ -2,7 +2,7 @@ import os
 import pandas as pd
 from notion_client import Client
 from dotenv import load_dotenv
-from .client import register_book_to_notion_page, create_notion_database
+from .client import register_book_to_notion_page
 from .data_fetcher import get_existing_asins, get_notion_select_options
 from .api_integrations import get_book_info_from_google_books, select_properties_with_gemini
 

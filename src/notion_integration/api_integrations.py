@@ -38,7 +38,7 @@ def select_properties_with_gemini(api_key, description, tags_list, types_list):
         return [], None
 
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-2.5-flash')
     prompt = f"""
     以下の書籍概要を分析し、2つのタスクを実行してください。
     1. 「タグリスト」の中から、概要に最も関連性の高いタグを0個から最大2個まで選んでください。
