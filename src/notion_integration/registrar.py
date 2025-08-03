@@ -61,16 +61,24 @@ def register_kindle_data_to_notion(kindle_df: pd.DataFrame, limit=None):
         book_description = get_book_info_from_google_books(google_api_key, title)
 
         selected_tags, selected_type = [], None
+        print("書籍情報からタグと種別を選定中...")
         if book_description:
-            print("書籍概要からタグと種別を選定中...")
-            if tags_list and types_list:
-                selected_tags, selected_type = select_properties_with_gemini(gemini_api_key, book_description, tags_list, types_list)
-                print(f"  - 選定されたタグ: {selected_tags}")
-                print(f"  - 選定された種別: {selected_type}")
-            else:
-                print("タグまたは種別の選択肢が利用できないため、選定をスキップします。")
+            print("  - 書籍概要が見つかりました。概要を基に選定します。")
         else:
-            print("書籍概要が取得できなかったため、タグと種別の選定はスキップします。")
+            print("  - 書籍概要が見つかりませんでした。タイトルを基にWeb検索で選定します。")
+
+        if tags_list and types_list:
+            selected_tags, selected_type = select_properties_with_gemini(
+                api_key=gemini_api_key,
+                title=title,
+                tags_list=tags_list,
+                types_list=types_list,
+                description=book_description
+            )
+            print(f"  - 選定されたタグ: {selected_tags}")
+            print(f"  - 選定された種別: {selected_type}")
+        else:
+            print("  - タグまたは種別の選択肢が利用できないため、選定をスキップします。")
 
         register_book_to_notion_page(notion, database_id, row, book_description, selected_tags, selected_type)
 
