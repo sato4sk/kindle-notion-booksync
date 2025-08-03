@@ -41,6 +41,37 @@ def get_existing_asins(notion_client, database_id):
             break
     return existing_asins
 
+def get_existing_titles(notion_client, database_id):
+    """Notionデータベースから既存のすべての書籍タイトルを取得する。"""
+    existing_titles = set()
+    has_more = True
+    start_cursor = None
+    while has_more:
+        try:
+            response = _notion_query_with_retry(notion_client, database_id, start_cursor)
+            for page in response.get("results", []):
+                title_property = page.get("properties", {}).get("書籍名", {})
+                title_list = title_property.get("title", [])
+                if title_list:
+                    existing_titles.add(title_list[0].get("plain_text"))
+            
+            has_more = response.get("has_more", False)
+            start_cursor = response.get("next_cursor")
+
+        except APIResponseError as e:
+            print(f"Notionから既存タイトルの取得中にAPIエラーが発生しました: {e}")
+            if e.code == "rate_limited":
+                retry_after = e.headers.get("Retry-After")
+                if retry_after:
+                    wait_time = int(retry_after)
+                    print(f"レート制限に達しました。{wait_time}秒待機します。")
+                    time.sleep(wait_time)
+            break
+        except Exception as e:
+            print(f"Notionから既存タイトルの取得中に予期せぬエラーが発生しました: {e}")
+            break
+    return existing_titles
+
 @retry(
     wait=wait_exponential(multiplier=1, min=4, max=10),
     stop=stop_after_attempt(5),

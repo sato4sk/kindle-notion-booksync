@@ -10,7 +10,7 @@ from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_excep
     retry=retry_if_exception_type(requests.exceptions.RequestException)
 )
 def get_book_info_from_google_books(api_key, title):
-    """Google Books APIから書籍の概要を取得する。"""
+    """Google Books APIから書籍情報を取得し、volumeInfoオブジェクトを返す。"""
     if not api_key:
         return None
     url = f"https://www.googleapis.com/books/v1/volumes?q=intitle:{title}&key={api_key}"
@@ -19,7 +19,7 @@ def get_book_info_from_google_books(api_key, title):
         response.raise_for_status()
         data = response.json()
         if data.get("totalItems", 0) > 0:
-            return data["items"][0].get("volumeInfo", {}).get("description")
+            return data["items"][0].get("volumeInfo") # descriptionだけでなく、volumeInfo全体を返す
     except requests.exceptions.RequestException as e:
         print(f"Google Books APIへのリクエスト中にエラー: {e}")
         raise # tenacityでリトライさせるために再raise

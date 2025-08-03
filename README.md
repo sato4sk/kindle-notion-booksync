@@ -70,6 +70,29 @@ uv run main.py
 
 このコマンドを実行すると、`data/BookData.sqlite` からKindleデータが抽出・整形され、Notionデータベースに登録されます。
 
+### 6. 単一書籍の登録（オプション）
+
+Kindleの蔵書データとは別に、単一の書籍を手動でNotionに登録することも可能です。
+
+以下のコマンドを使用します。
+
+```bash
+uv run register_single_book.py --title "書籍のタイトル" [--author "著者名"] [--asin "ASIN"] [--publisher "出版社名"] [--purchase_date "YYYY-MM-DD"]
+```
+
+*   `--title` (必須): 登録したい書籍のタイトルを指定します。
+*   `--author` (任意): 著者名を指定します。省略した場合、Google Books APIから取得を試みます。
+*   `--asin` (任意): ASINを指定します。
+*   `--publisher` (任意): 出版社名を指定します。省略した場合、Google Books APIから取得を試みます。
+*   `--purchase_date` (任意): 購入日を `YYYY-MM-DD` 形式で指定します。
+
+**実行例:**
+```bash
+uv run register_single_book.py --title "ゼロトラストネットワーク 第2版"
+```
+
+この機能は、まずNotion内に同じタイトルの書籍が存在しないかを確認してから、登録処理に進みます。情報が不足している場合（著者など）は、Google Books APIから情報を補完します。
+
 ### 注意事項
 
 *   Notion APIのレート制限やGemini APIのクォータ制限に注意してください。特にGemini APIは無料枠に制限があるため、大量の書籍を一度に処理するとエラーになる可能性があります。その場合は、時間をおいて再試行するか、APIの利用状況を確認してください。

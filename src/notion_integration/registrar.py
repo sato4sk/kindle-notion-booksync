@@ -6,81 +6,115 @@ from .client import register_book_to_notion_page
 from .data_fetcher import get_existing_asins, get_notion_select_options
 from .api_integrations import get_book_info_from_google_books, select_properties_with_gemini
 
-def register_kindle_data_to_notion(kindle_df: pd.DataFrame, limit=None):
-    """書籍データを処理し、Notionへの登録を行う。"""
+def setup_notion_client_and_get_context():
+    """環境変数を読み込み、Notionクライアントと登録に必要なコンテキスト情報を準備する。"""
     load_dotenv(override=True)
 
     notion_token = os.getenv('NOTION_API_TOKEN')
     database_id = os.getenv('NOTION_DB_ID')
     google_api_key = os.getenv('GOOGLE_BOOKS_API_KEY')
     gemini_api_key = os.getenv('GEMINI_API_KEY')
-    
 
-    if not notion_token:
-        print("エラー: NOTION_API_TOKEN が設定されていません。")
-        return
+    if not all([notion_token, database_id, google_api_key, gemini_api_key]):
+        raise ValueError("必要な環境変数 (NOTION_API_TOKEN, NOTION_DB_ID, GOOGLE_BOOKS_API_KEY, GEMINI_API_KEY) が設定されていません。")
 
     notion = Client(auth=notion_token)
 
-    if not database_id:
-        print("エラー: NOTION_DB_ID が設定されていません。")
-        return
-
-    if not all([google_api_key, gemini_api_key]):
-        print("エラー: GOOGLE_BOOKS_API_KEY または GEMINI_API_KEY が設定されていません。")
-        return
-    
     print("Notionから既存の書籍情報を取得しています...")
     existing_asins = get_existing_asins(notion, database_id)
     print(f"{len(existing_asins)}件の既存書籍が見つかりました。")
 
-    print("Notionからプロパティ情報を取得しています...\n")
+    print("Notionからプロパティ情報を取得しています...")
     tags_list = get_notion_select_options(notion, database_id, 'タグ')
     types_list = get_notion_select_options(notion, database_id, '種別')
-    
-    if not tags_list:
-        print("警告: 'タグ' プロパティの選択肢が取得できませんでした。データベースが新規作成されたばかりの場合、これは正常です。")
-    if not types_list:
-        print("警告: '種別' プロパティの選択肢が取得できませんでした。データベースが新規作成されたばかりの場合、これは正常です。")
+    if not tags_list or not types_list:
+        print("警告: 'タグ' または '種別' の選択肢が取得できませんでした。")
 
-    if limit is not None:
-        df = kindle_df.head(limit)
-    else:
-        df = kindle_df
+    api_keys = {'google': google_api_key, 'gemini': gemini_api_key}
+    property_options = {'tags': tags_list, 'types': types_list}
 
-    print("\n書籍情報を処理し、Notionに登録します...")
-    for _, row in df.iterrows():
-        title = row['title']
-        asin = row.get('asin')
-        print(f"\n--- 処理中の書籍: {title} (ASIN: {asin}) ---")
+    return notion, database_id, api_keys, property_options, existing_asins
 
-        if asin in existing_asins:
-            print("-> この書籍は既にNotionに存在するため、スキップします。")
-            continue
+def process_and_register_book(notion, database_id, book_data, api_keys, property_options):
+    """（重複チェックなし）一冊の書籍データを処理し、Notionに登録する。"""
+    title = book_data['title']
+    print(f"\n--- 処理中の書籍: {title} ---")
 
-        book_description = get_book_info_from_google_books(google_api_key, title)
+    # Google Books APIから情報を取得
+    volume_info = get_book_info_from_google_books(api_keys['google'], title)
+    book_description = None
 
-        selected_tags, selected_type = [], None
-        print("書籍情報からタグと種別を選定中...")
+    if volume_info:
+        print("  - Google Books APIから書籍情報を取得しました。")
+        book_description = volume_info.get('description')
         if book_description:
-            print("  - 書籍概要が見つかりました。概要を基に選定します。")
-        else:
-            print("  - 書籍概要が見つかりませんでした。タイトルを基にWeb検索で選定します。")
+            print(f"    - 概要: {book_description[:100]}...")
 
-        if tags_list and types_list:
-            selected_tags, selected_type = select_properties_with_gemini(
-                api_key=gemini_api_key,
-                title=title,
-                tags_list=tags_list,
-                types_list=types_list,
-                description=book_description
+        # 入力されなかった情報をAPIからの情報で補完（エンリッチ）
+        if not book_data.get('author') and volume_info.get('authors'):
+            book_data['author'] = ", ".join(volume_info['authors'])
+            print(f"    - 著者を補完しました: {book_data['author']}")
+        if not book_data.get('publisher') and volume_info.get('publisher'):
+            book_data['publisher'] = volume_info['publisher']
+            print(f"    - 出版社を補完しました: {book_data['publisher']}")
+    else:
+        print("  - Google Books APIで書籍情報が見つかりませんでした。")
+
+    print("\n書籍情報からタグと種別を選定中...")
+    if property_options['tags'] and property_options['types']:
+        selected_tags, selected_type = select_properties_with_gemini(
+            api_key=api_keys['gemini'],
+            title=title,
+            tags_list=property_options['tags'],
+            types_list=property_options['types'],
+            description=book_description
+        )
+        print(f"  - 選定されたタグ: {selected_tags}")
+        print(f"  - 選定された種別: {selected_type}")
+    else:
+        selected_tags, selected_type = [], None
+        print("  - タグまたは種別の選択肢が利用できないため、選定をスキップします。")
+
+    # 補完された可能性のあるbook_dataを渡す
+    register_book_to_notion_page(notion, database_id, book_data, book_description, selected_tags, selected_type)
+
+def register_kindle_data_to_notion(kindle_df: pd.DataFrame, limit=None):
+    """Kindleの書籍データフレームを処理し、Notionへの一括登録を行う。"""
+    try:
+        (
+            notion,
+            database_id,
+            api_keys,
+            property_options,
+            existing_asins
+        ) = setup_notion_client_and_get_context()
+
+        if limit is not None:
+            df = kindle_df.head(limit)
+        else:
+            df = kindle_df
+
+        print("\n書籍情報を一括処理し、Notionに登録します...")
+        for _, row in df.iterrows():
+            book_data = row.to_dict()
+            asin = book_data.get('asin')
+
+            # ASINでの重複チェックをここで行う
+            if asin and asin in existing_asins:
+                print(f"-> 書籍「{book_data['title']}」(ASIN: {asin})は既に存在するため、スキップします。")
+                continue
+
+            process_and_register_book(
+                notion,
+                database_id,
+                book_data,
+                api_keys,
+                property_options
             )
-            print(f"  - 選定されたタグ: {selected_tags}")
-            print(f"  - 選定された種別: {selected_type}")
-        else:
-            print("  - タグまたは種別の選択肢が利用できないため、選定をスキップします。")
+        print("\n一括登録処理が完了しました。")
 
-        register_book_to_notion_page(notion, database_id, row, book_description, selected_tags, selected_type)
+    except (ValueError, Exception) as e:
+        print(f"\nエラーが発生しました: {e}")
 
 
 if __name__ == "__main__":
@@ -95,10 +129,4 @@ if __name__ == "__main__":
     }
     dummy_df = pd.DataFrame(dummy_data)
     
-    # 環境変数をロード
-    load_dotenv()
-
-    # register_kindle_data_to_notion 関数を実行
     register_kindle_data_to_notion(dummy_df, limit=2)
-
-    print("\nスクリプトの実行が完了しました。")
